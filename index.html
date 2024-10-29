@@ -362,7 +362,7 @@ function createAlien(x, y, row) {
 function checkLevelCompletion() {
     if (aliens.every(alien => !alien.alive)) {
         currentLevel++;
-        if (currentLevel > 10) { 
+        if (currentLevel > 9) { 
             currentLevel = 1; 
             alert("Congratulations! You've completed all levels! Restarting from Level 1.");
         }
