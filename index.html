@@ -182,7 +182,7 @@ function restartCurrentLevel(fullReset = false) {
         function createAliens() {
             switch (currentLevel) {
         case 1:
-        createStandardGrid();
+        createDiamondFormation();
             break;
         case 2:
             createZigzagFormation();
@@ -274,13 +274,13 @@ function createTriangleFormation() {
 }
 
 function createDiamondFormation() {
-    const startY = 200; 
-    const size = 5; 
+    const startY = 400; 
+    const size = 8; 
     for (let i = 0; i < size; i++) {
         const width = size - Math.abs(size - 1 - i); 
         for (let j = 0; j < width; j++) {
             const alienX = (canvas.width / 2) + (j - width / 2) * 50; 
-            const alienY = startY + (i * 40); 
+            const alienY = startY + (i * -40); 
             aliens.push(createAlien(alienX, alienY, i));
         }
     }
