@@ -339,7 +339,7 @@ function createSpiralFormation() {
     const centerY = 200; 
     for (let i = 0; i < numAliens; i++) {
         const angle = i * 0.2; 
-        const radius = i * 10; 
+        const radius = i * 7; 
         const alienX = centerX + radius * Math.cos(angle);
         const alienY = centerY + radius * Math.sin(angle); 
         aliens.push(createAlien(alienX, alienY, 0)); 
