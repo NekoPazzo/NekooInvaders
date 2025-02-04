@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NekoBall</title>
+    <style>
+        canvas {
+            border: 2px solid rgb(255, 255, 255);
+            background: #87CEEB;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #1a1a1a;
+            font-family: Arial, sans-serif;
+        }
+        #score {
+            margin: 10px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        #gameState {
+            margin: 10px;
+            font-size: 18px;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div style="color: #ffffff;" id="score">Red Team: 0 - Blue Team: 0</div>
+    <div id="gameState">Press SPACE to start</div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameStateElement = document.getElementById('gameState');
+
+        const GAME_CONFIG = {
+            maxScore: 5,
+            ballMaxSpeed: 12,
+            playerMaxSpeed: 6,
+            gravity: 0.3,
+            bounce: 0.7
+        };
+
+        let redScore = 0;
+        let blueScore = 0;
+        let gameStarted = false;
+        let gameOver = false;
+        let servingTeam = 'red';
+
+        const catStyles = {
+            red: {
+                body: '#FF6347',
+                ears: '#8B0000',
+                tail: '#8B0000'
+            },
+            lightRed: {
+                body: '#FFA07A',
+                ears: '#CD5C5C',
+                tail: '#CD5C5C'
+            },
+            blue: {
+                body: '#4169E1',
+                ears: '#000080',
+                tail: '#000080'
+            },
+            lightBlue: {
+                body: '#87CEFA',
+                ears: '#4682B4',
+                tail: '#4682B4'
+            }
+        };
+
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 10,
+            speedX: 0,
+            speedY: 0,
+            gravity: GAME_CONFIG.gravity,
+            bounce: GAME_CONFIG.bounce,
+            reset() {
+                this.speedX = 0;
+                this.speedY = 0;
+                this.x = servingTeam === 'red' ? canvas.width * 0.25 : canvas.width * 0.75;
+                this.y = canvas.height * 0.3;
+            },
+            applyForce(angle, power) {
+                const normalizedAngle = Math.max(Math.min(angle, Math.PI/2), -Math.PI/2);
+                this.speedX = Math.sin(normalizedAngle) * power * 0.8;
+                this.speedY = -Math.abs(Math.cos(normalizedAngle)) * power * 0.8;
+            }
+        };
+
+        class CatPlayer {
+            constructor(x, y, isBot, catStyle, side) {
+                this.x = x;
+                this.y = y;
+                this.width = 50;
+                this.height = 50;
+                this.speed = GAME_CONFIG.playerMaxSpeed;
+                this.jumpForce = 14;
+                this.isBot = isBot;
+                this.catStyle = catStyle;
+                this.speedY = 0;
+                this.isGrounded = true;
+                this.side = side;
+                this.originalX = x;
+                this.aiReactTime = 0;
+                this.aiAggressiveness = 1.2;
+            }
+
+            update() {
+                this.speedY += 0.9;
+                this.y += this.speedY;
+
+                if (this.y + this.height > canvas.height - 20) {
+                    this.y = canvas.height - 20 - this.height;
+                    this.speedY = 0;
+                    this.isGrounded = true;
+                } else {
+                    this.isGrounded = false;
+                }
+
+                const courtLimit = this.side === 'left' ? canvas.width / 2 - 50 : canvas.width / 2 + 50;
+                this.x = this.side === 'left' 
+                    ? Math.max(this.width/2, Math.min(courtLimit, this.x))
+                    : Math.max(courtLimit, Math.min(canvas.width - this.width/2, this.x));
+
+                if (this.isBot) {
+                    this.aiReactTime--;
+                    if (this.aiReactTime <= 0) {
+                        const predictedX = ball.x + ball.speedX * 2;
+                        const distanceToBall = Math.abs(this.x - predictedX);
+
+                        if (distanceToBall > 10) {
+                            this.x += (predictedX > this.x ? this.speed : -this.speed) * this.aiAggressiveness;
+                        }   
+
+                        if (ball.y < this.y && 
+                            Math.abs(this.x - ball.x) < 150 && 
+                            ball.speedY > 0 &&
+                            this.isGrounded) {
+                            this.jump();
+                        }
+
+                        this.aiReactTime = Math.floor(Math.random() * 5) + 2;
+                    }
+                }
+            }
+
+            jump() {
+                if (this.isGrounded) {
+                    this.speedY = -this.jumpForce;
+                    this.isGrounded = false;
+                }
+            }
+
+            draw() {
+                const style = this.catStyle;
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.ellipse(this.x, canvas.height - 20, this.width/2, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = style.body;
+                ctx.fillRect(this.x - this.width/2, this.y, this.width, this.height);
+
+                ctx.fillStyle = style.ears;
+                ctx.beginPath();
+                ctx.moveTo(this.x - this.width/2, this.y);
+                ctx.lineTo(this.x - this.width/2 - 10, this.y - 15);
+                ctx.lineTo(this.x - this.width/2 + 10, this.y - 10);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(this.x + this.width/2, this.y);
+                ctx.lineTo(this.x + this.width/2 + 10, this.y - 15);
+                ctx.lineTo(this.x + this.width/2 - 10, this.y - 10);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = style.tail;
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(this.x + (this.side === 'left' ? -this.width/2 : this.width/2), this.y + this.height/2);
+                ctx.quadraticCurveTo(
+                    this.x + (this.side === 'left' ? -this.width : this.width), 
+                    this.y + this.height/2 + 20, 
+                    this.x + (this.side === 'left' ? -this.width - 10 : this.width + 10), 
+                    this.y + this.height/2
+                );
+                ctx.stroke();
+            }
+        }
+
+        const net = {
+            x: canvas.width / 2,
+            y: canvas.height - 120,
+            width: 10,
+            height: 100
+        };
+
+        const player = new CatPlayer(200, canvas.height - 90, false, catStyles.red, 'left');
+        const teammate = new CatPlayer(300, canvas.height - 90, true, catStyles.lightRed, 'left');
+        const opponent1 = new CatPlayer(500, canvas.height - 90, true, catStyles.blue, 'right');
+        const opponent2 = new CatPlayer(600, canvas.height - 90, true, catStyles.lightBlue, 'right');
+
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (e.key === ' ' && !gameStarted && !gameOver) {
+                gameStarted = true;
+                ball.applyForce(
+                    servingTeam === 'red' ? Math.PI/4 : -Math.PI/4, 
+                    10.5
+                );
+                gameStateElement.textContent = 'Game in progress';
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        function handleInput() {
+            if (keys['ArrowLeft']) player.x -= player.speed;
+            if (keys['ArrowRight']) player.x += player.speed;
+            if (keys['ArrowUp']) player.jump();
+        }
+
+        function resetRound(winner) {
+            if (gameOver) return;
+
+            if (winner === 'red') redScore++;
+            if (winner === 'blue') blueScore++;
+            
+            scoreElement.textContent = `Red Team: ${redScore} - Blue Team: ${blueScore}`;
+            
+            if (redScore >= GAME_CONFIG.maxScore || blueScore >= GAME_CONFIG.maxScore) {
+                gameOver = true;
+                gameStateElement.textContent = `Game Over! ${winner.toUpperCase()} Team Wins!`;
+                return;
+            }
+
+            servingTeam = winner;
+            gameStarted = false;
+            ball.reset();
+            
+            player.x = 200;
+            teammate.x = 300;
+            opponent1.x = 500;
+            opponent2.x = 600;
+        }
+
+        function checkCollisions() {
+    // Wall bounce on left and right walls
+    if (ball.x - ball.radius < 0) {
+        ball.x = ball.radius;
+        ball.speedX = -ball.speedX * ball.bounce;
+    }
+    
+    if (ball.x + ball.radius > canvas.width) {
+        ball.x = canvas.width - ball.radius;
+        ball.speedX = -ball.speedX * ball.bounce;
+    }
+
+    if (ball.y + ball.radius > canvas.height - 20) {
+        if (ball.x < canvas.width / 2) {
+            resetRound('blue');
+        } else {
+            resetRound('red');
+        }
+        return;
+    }
+
+    if (ball.x + ball.radius > net.x - net.width/2 && 
+        ball.x - ball.radius < net.x + net.width/2 &&
+        ball.y + ball.radius > net.y) {
+        ball.x = ball.x < net.x ? net.x - net.width/2 - ball.radius : net.x + net.width/2 + ball.radius;
+        ball.speedX = -ball.speedX * ball.bounce;
+    }
+
+    [player, teammate, opponent1, opponent2].forEach(p => {
+        // Expanded collision detection to handle ball passing through players
+        const leftEdge = p.x - p.width/2;
+        const rightEdge = p.x + p.width/2;
+        const topEdge = p.y;
+        const bottomEdge = p.y + p.height;
+
+        // Check if ball is intersecting player
+        if (ball.x + ball.radius > leftEdge &&
+            ball.x - ball.radius < rightEdge &&
+            ball.y + ball.radius > topEdge &&
+            ball.y - ball.radius < bottomEdge) {
+            
+            // Determine most appropriate collision resolution
+            let resolveX = ball.speedX;
+            let resolveY = ball.speedY;
+
+            // Horizontal collision resolution
+            if (ball.speedX > 0) {
+                ball.x = leftEdge - ball.radius;
+            } else {
+                ball.x = rightEdge + ball.radius;
+            }
+            resolveX = -resolveX * ball.bounce;
+
+            // Vertical collision resolution
+            if (ball.speedY > 0) {
+                ball.y = topEdge - ball.radius;
+            } else {
+                ball.y = bottomEdge + ball.radius;
+            }
+            resolveY = -resolveY * ball.bounce;
+
+            // Calculate collision point for angle
+            const collisionPoint = (ball.x - p.x) / (p.width/2);
+            const angle = collisionPoint * Math.PI/2.5;
+            
+            const currentSpeed = Math.sqrt(resolveX * resolveX + resolveY * resolveY);
+            const newSpeed = Math.min(currentSpeed * 1.1, GAME_CONFIG.ballMaxSpeed);
+            
+            ball.speedX = resolveX;
+            ball.speedY = resolveY;
+            ball.applyForce(angle, newSpeed);
+        }
+    });
+}
+
+        function update() {
+            if (!gameStarted || gameOver) return;
+            
+            handleInput();
+            
+            ball.speedY += ball.gravity;
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            [player, teammate, opponent1, opponent2].forEach(p => p.update());
+
+            checkCollisions();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#FFE4B5';
+            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+            
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, canvas.height - 20);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.stroke();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(net.x - net.width/2, net.y, net.width, net.height);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(ball.x, canvas.height - 20, ball.radius, ball.radius/2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+
+            [player, teammate, opponent1, opponent2].forEach(p => p.draw());
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        ball.reset();
+        gameLoop();
+    </script>
+</body>
+</html>
